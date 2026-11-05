@@ -1,0 +1,239 @@
+YoutubeToMp3 — project scope
+Ground truth for other agents
+Last updated: 5 November 2026
+
+This file is the source of truth for what YoutubeToMp3 is and is not.
+Follow it. Do not add features, screens, or behaviors that this file does not
+require. If something is listed under "Not decided", leave it undecided.
+If something is listed under "Locked decisions", implement it that way.
+
+
+1. What this is
+---------------
+A desktop application for one person, on that person's own computer.
+
+The user pastes a YouTube channel URL, reviews that channel's regular videos,
+selects some of them, and saves the selection as MP3 files in a folder they
+choose at the start of that download.
+
+Nobody else uses this tool. It is not a website, not a hosted service, and
+not a multi-user app.
+
+
+2. Legal boundary
+-----------------
+The tool is for audio the user is allowed to keep: their own uploads,
+Creative Commons material, or other audio they have permission to save.
+
+YouTube's terms restrict unauthorized downloading. Saving other people's
+copyrighted audio without permission is out of scope.
+
+Do not turn this into a public downloader, a sharing service, or anything
+that distributes files to other people.
+
+
+3. How the user starts
+----------------------
+- There is a text box for a YouTube channel URL.
+- There is a Search button next to that text box.
+- The video list loads or refreshes only when the user presses Search.
+- Editing the URL does not refresh the list by itself.
+- v1 accepts a channel URL. It does not accept a bare display name, a bare
+  @handle, or a playlist as the thing to fetch.
+
+If the text is not a usable channel URL, show an error and leave the current
+list unchanged.
+
+
+4. Which videos appear
+----------------------
+Include regular public videos from that channel.
+
+Do not include:
+- Shorts
+- Livestreams
+- Premieres
+- Members-only videos
+
+Age-restricted, region-blocked, and already-removed videos are not a separate
+hide rule. If the user selects one and the download fails, count it as a
+failed download (see section 8).
+
+
+5. What each video shows
+------------------------
+For each video in the list, show:
+- title
+- duration
+- upload date
+- a checkbox
+
+Do not show view count, thumbnail, or description in v1.
+
+
+6. Sort, filter, and paging
+---------------------------
+Sort by upload date. Default order is newest first. The user can switch
+between newest first and oldest first.
+
+Filter by video title. The filter is a case-insensitive match on the title
+text. It applies only to videos already loaded. It does not fetch more videos
+and it does not replace Search.
+
+Paging:
+- Fetch 30 videos at a time.
+- A "show more" control loads the next 30 and appends them to the list.
+- Videos already on screen stay on screen.
+- When fewer than 30 videos remain, load those and then stop offering more.
+- Design for a channel of about 300 videos (about 10 pages). Do not load the
+  whole channel in one request.
+
+Sort and filter apply to the videos loaded so far, including videos appended
+with "show more".
+
+
+7. Selection
+------------
+- Each video has a checkbox.
+- There is a select-all control.
+- Select-all affects the videos currently loaded that match the current title
+  filter. Videos not loaded yet are not selected.
+- The user may select several videos. v1 still downloads them one at a time
+  (see section 8). Selecting several videos is in scope now so a later version
+  can download in bulk without changing how selection works.
+
+
+8. Download behavior (v1)
+-------------------------
+Process the selected videos one at a time, in the order they appear in the
+current list. Do not download more than one video at the same time.
+
+Audio:
+- Container and codec target: MP3.
+- Bitrate: 192 kbps, fixed. No quality picker.
+
+File name:
+- The file name is the video title, plus the .mp3 extension.
+- Do not prefix the channel name, the artist, or the upload date.
+- Do not embed title, channel name, thumbnail, or cover art in the file.
+- Do not write ID3 tags or other metadata in v1.
+- If the title contains characters that are illegal in a file name on
+  Windows, macOS, or Linux (\ / : * ? " < > | and control characters),
+  replace those characters so the file can be saved. The title shown in the
+  list stays the original title. This sanitizing is only so the file can
+  exist on disk. It is not a different naming scheme.
+- Trim spaces and dots from the ends of the file name after sanitizing.
+
+Folder:
+- Every download action starts by asking the user to pick a folder.
+- There is no fixed downloads folder.
+- One folder applies to every file in that action.
+
+File already in that folder:
+- Before writing a file, if that file name already exists in the chosen
+  folder, ask whether to overwrite it.
+- If the user agrees, overwrite that file and continue with the rest of the
+  queue.
+- If the user declines, cancel the action: do not overwrite that file, and
+  do not start any further videos in the queue.
+- Files already finished earlier in the same action stay in the folder.
+
+Progress, for each video that has been attempted:
+- Show a percentage (0 to 100) for the file that is currently downloading.
+- Show one of these states: working, done, failed.
+- A selected video that has not started yet has no state yet.
+
+Failures:
+- If one video fails (removed, region-blocked, age-restricted, or any other
+  download error), continue with the rest of the queue.
+- A failure does not cancel the action. Only overwrite-decline and an
+  explicit cancel do that.
+
+When the run finishes, show:
+- how many downloads succeeded
+- how many downloads failed
+
+Cancel:
+- The user can cancel a download that is already running.
+- Cancel stops the file in progress and does not start the rest of the queue.
+- Do not leave a partial file behind as if it were a finished MP3. Remove
+  the incomplete file.
+- Files already finished stay in the folder.
+- Videos not started because of the cancel are not counted as failures.
+- After a cancel, still show the success count, the failure count, and that
+  the run was cancelled.
+
+While a download action is running:
+- The user can cancel it.
+- Search and "show more" wait until the action finishes or is cancelled, so
+  the list does not change underneath the queue.
+
+
+9. What v1 does not include
+---------------------------
+- Accounts, login, or any other user
+- A website or a server other people can reach
+- Download history, a past-downloads list, or "already downloaded" badges
+- Playlists as the entry point
+- Lookup by display name or @handle
+- Shorts, livestreams, premieres, members-only videos
+- More than one download at a time
+- Any bitrate other than 192 kbps
+- Any file name other than the video title
+- A default folder that skips the folder picker
+- Embedded tags, cover art, or thumbnails inside the MP3
+- View counts, thumbnails, or descriptions in the list
+- Refreshing the list without pressing Search
+
+
+10. Later version (do not build this now)
+-----------------------------------------
+Bulk download: process the same selected queue with more than one download
+at a time.
+
+v1 already lets the user select many videos, already runs that selection as
+a queue, and already reports a success count and a failure count. The later
+change is concurrency, not a new way to select videos.
+
+
+11. Good enough to use
+----------------------
+v1 is good enough when the user can:
+- paste a channel URL
+- press Search
+- see titles, durations, and upload dates
+- sort by date and filter by title
+- load further videos 30 at a time
+- tick a few videos (or select all of the loaded, filtered list)
+- pick a folder
+- get 192 kbps MP3s named from the video titles
+- see working / done / failed, a percentage on the file in progress, and a
+  final count of successes and failures
+
+
+12. Locked decisions
+--------------------
+These were not spelled out as separate answers. They are decided here so
+later agents do not invent a different behavior.
+
+- Search fetches the channel. The title filter only narrows videos already
+  loaded.
+- Default sort is newest upload date first, and the user can reverse it.
+- Page size is 30, appended, not replaced.
+- Select-all applies to loaded videos that match the filter, not to videos
+  still unloaded.
+- Several checked videos download sequentially, one at a time.
+- Declining an overwrite cancels the rest of the action.
+- Cancel removes the incomplete file and does not count unstarted videos as
+  failures.
+- Title-to-filename sanitizing exists only to strip illegal file-name
+  characters. It does not add channel, artist, or date to the name.
+- Technology is not part of this scope. See section 13.
+
+
+13. Not decided
+---------------
+The implementation stack is not chosen. Do not assume a language, UI toolkit,
+packaging format, or download library in this file. A later decision will
+choose the technologies. Until that decision exists, do not start building
+the app from this file alone.
