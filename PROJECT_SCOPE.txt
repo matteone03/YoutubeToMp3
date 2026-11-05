@@ -4,15 +4,15 @@ Last updated: 5 November 2026
 
 This file is the source of truth for what YoutubeToMp3 is and is not.
 Follow it. Do not add features, screens, or behaviors that this file does not
-require. If something is listed under "Not decided", leave it undecided.
-If something is listed under "Locked decisions", implement it that way.
+require. If something is listed under "Locked decisions", implement it that way.
 
 
 1. What this is
 ---------------
 A desktop application for one person, on that person's own computer.
+It runs on Windows and on macOS.
 
-The user pastes a YouTube channel URL, reviews that channel's regular videos,
+The user pastes a YouTube channel URL, reviews that channel's regular videos.
 selects some of them, and saves the selection as MP3 files in a folder they
 choose at the start of that download.
 
@@ -20,19 +20,7 @@ Nobody else uses this tool. It is not a website, not a hosted service, and
 not a multi-user app.
 
 
-2. Legal boundary
------------------
-The tool is for audio the user is allowed to keep: their own uploads,
-Creative Commons material, or other audio they have permission to save.
-
-YouTube's terms restrict unauthorized downloading. Saving other people's
-copyrighted audio without permission is out of scope.
-
-Do not turn this into a public downloader, a sharing service, or anything
-that distributes files to other people.
-
-
-3. How the user starts
+2. How the user starts
 ----------------------
 - There is a text box for a YouTube channel URL.
 - There is a Search button next to that text box.
@@ -45,7 +33,7 @@ If the text is not a usable channel URL, show an error and leave the current
 list unchanged.
 
 
-4. Which videos appear
+3. Which videos appear
 ----------------------
 Include regular public videos from that channel.
 
@@ -57,10 +45,10 @@ Do not include:
 
 Age-restricted, region-blocked, and already-removed videos are not a separate
 hide rule. If the user selects one and the download fails, count it as a
-failed download (see section 8).
+failed download (see section 7).
 
 
-5. What each video shows
+4. What each video shows
 ------------------------
 For each video in the list, show:
 - title
@@ -71,14 +59,10 @@ For each video in the list, show:
 Do not show view count, thumbnail, or description in v1.
 
 
-6. Sort, filter, and paging
+5. Sort, filter, and paging
 ---------------------------
 Sort by upload date. Default order is newest first. The user can switch
 between newest first and oldest first.
-
-Filter by video title. The filter is a case-insensitive match on the title
-text. It applies only to videos already loaded. It does not fetch more videos
-and it does not replace Search.
 
 Paging:
 - Fetch 30 videos at a time.
@@ -92,18 +76,18 @@ Sort and filter apply to the videos loaded so far, including videos appended
 with "show more".
 
 
-7. Selection
+6. Selection
 ------------
 - Each video has a checkbox.
 - There is a select-all control.
 - Select-all affects the videos currently loaded that match the current title
   filter. Videos not loaded yet are not selected.
 - The user may select several videos. v1 still downloads them one at a time
-  (see section 8). Selecting several videos is in scope now so a later version
+  (see section 7). Selecting several videos is in scope now so a later version
   can download in bulk without changing how selection works.
 
 
-8. Download behavior (v1)
+7. Download behavior (v1)
 -------------------------
 Process the selected videos one at a time, in the order they appear in the
 current list. Do not download more than one video at the same time.
@@ -169,7 +153,7 @@ While a download action is running:
   the list does not change underneath the queue.
 
 
-9. What v1 does not include
+8. What v1 does not include
 ---------------------------
 - Accounts, login, or any other user
 - A website or a server other people can reach
@@ -186,17 +170,18 @@ While a download action is running:
 - Refreshing the list without pressing Search
 
 
-10. Later version (do not build this now)
+9. Later version (do not build this now)
 -----------------------------------------
 Bulk download: process the same selected queue with more than one download
 at a time.
 
 v1 already lets the user select many videos, already runs that selection as
 a queue, and already reports a success count and a failure count. The later
-change is concurrency, not a new way to select videos.
+change is concurrency, not a new way to select videos. v1 starts one download
+child process. That later version may start more than one. See section 12.
 
 
-11. Good enough to use
+10. Good enough to use
 ----------------------
 v1 is good enough when the user can:
 - paste a channel URL
@@ -211,7 +196,7 @@ v1 is good enough when the user can:
   final count of successes and failures
 
 
-12. Locked decisions
+11. Locked decisions
 --------------------
 These were not spelled out as separate answers. They are decided here so
 later agents do not invent a different behavior.
@@ -228,12 +213,43 @@ later agents do not invent a different behavior.
   failures.
 - Title-to-filename sanitizing exists only to strip illegal file-name
   characters. It does not add channel, artist, or date to the name.
-- Technology is not part of this scope. See section 13.
+- The stack and the target systems are decided in section 12. Do not replace
+  Python, yt-dlp, ffmpeg, or PySide6, and do not drop Windows or macOS.
 
 
-13. Not decided
----------------
-The implementation stack is not chosen. Do not assume a language, UI toolkit,
-packaging format, or download library in this file. A later decision will
-choose the technologies. Until that decision exists, do not start building
-the app from this file alone.
+12. Technology
+--------------
+Decided. Use this stack for v1.
+
+Platforms:
+- The app must run on Windows and on macOS.
+- One codebase, with a Windows build and a macOS build.
+- Each build carries the ffmpeg binary for that system, and the yt-dlp the
+  app uses. The user does not install ffmpeg or yt-dlp separately.
+- Linux is not a v1 target. Filename sanitizing still strips characters that
+  are illegal on Linux, because section 7 already requires that.
+
+Application:
+- Python.
+
+Channel listing and download:
+- yt-dlp lists the channel and downloads each video.
+- One tool covers both jobs.
+- Do not require a YouTube API key.
+
+Audio:
+- ffmpeg, called by yt-dlp, writes the 192 kbps MP3 described in section 7.
+
+Window:
+- PySide6.
+- It provides the table, the checkboxes, the native folder dialog, and the
+  progress display.
+
+Download process:
+- Each download runs in its own child process.
+- v1 starts only one child process at a time.
+- Cancel terminates that process. The app then removes the incomplete file,
+  as section 7 requires.
+- A later bulk version may start more than one child process. Do not build
+  that now. Keep this process boundary so that change does not need a new
+  way to select videos.
