@@ -6,9 +6,10 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QBrush, QColor, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
@@ -38,6 +39,40 @@ from youtubetomp3.videos import (
     sort_videos,
     title_matches,
 )
+
+_INK = QBrush(QColor("#1c1915"))
+
+
+def _light_palette() -> QPalette:
+    """Light paper and dark ink for every color group.
+
+    Windows dark mode otherwise supplies white text, which disappears on these
+    light backgrounds. Linux already uses dark text, so this matches it.
+    """
+    ink = QColor("#1c1915")
+    muted = QColor("#5c564c")
+    paper = QColor("#f6f3ec")
+    card = QColor("#fffcf7")
+    button = QColor("#efeae1")
+    palette = QPalette()
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
+    ):
+        palette.setColor(group, QPalette.ColorRole.Window, paper)
+        palette.setColor(group, QPalette.ColorRole.WindowText, ink)
+        palette.setColor(group, QPalette.ColorRole.Base, card)
+        palette.setColor(group, QPalette.ColorRole.AlternateBase, QColor("#f3efe6"))
+        palette.setColor(group, QPalette.ColorRole.Text, ink)
+        palette.setColor(group, QPalette.ColorRole.Button, button)
+        palette.setColor(group, QPalette.ColorRole.ButtonText, ink)
+        palette.setColor(group, QPalette.ColorRole.PlaceholderText, muted)
+        palette.setColor(group, QPalette.ColorRole.ToolTipBase, card)
+        palette.setColor(group, QPalette.ColorRole.ToolTipText, ink)
+        palette.setColor(group, QPalette.ColorRole.Highlight, QColor("#ebe4d8"))
+        palette.setColor(group, QPalette.ColorRole.HighlightedText, ink)
+    return palette
 
 
 class ListWorker(QThread):
@@ -165,7 +200,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         title = QLabel("YoutubeToMp3")
-        title.setStyleSheet("font-size: 22px; font-weight: 600;")
+        title.setStyleSheet("font-size: 22px; font-weight: 600; color: #1c1915;")
         subtitle = QLabel("Paste a channel URL, pick videos, and save them as 192 kbps MP3 files.")
         subtitle.setStyleSheet("color: #5c564c;")
         subtitle.setWordWrap(True)
@@ -242,45 +277,57 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.message)
 
     def _apply_style(self) -> None:
-        palette = self.palette()
-        palette.setColor(QPalette.ColorRole.Window, QColor("#f6f3ec"))
-        palette.setColor(QPalette.ColorRole.WindowText, QColor("#1c1915"))
+        palette = _light_palette()
         self.setPalette(palette)
         self.centralWidget().setAutoFillBackground(True)
         self.centralWidget().setPalette(palette)
+        qt_app = QApplication.instance()
+        if qt_app is not None:
+            qt_app.setPalette(palette)
         # Style the controls themselves. A stylesheet on the window makes the
-        # table draw its checkboxes as wide empty boxes.
+        # table draw its checkboxes as wide empty boxes. Each light surface
+        # also sets a dark text color, because Windows dark mode otherwise
+        # keeps white text on these backgrounds.
         field = (
-            "background: #fffcf7; border: 1px solid #d9d2c5; "
+            "background: #fffcf7; color: #1c1915; border: 1px solid #d9d2c5; "
             "border-radius: 6px; padding: 6px;"
         )
         button = (
-            "background: #efeae1; border: 1px solid #d9d2c5; "
+            "background: #efeae1; color: #1c1915; border: 1px solid #d9d2c5; "
             "border-radius: 6px; padding: 8px 14px;"
         )
         self.url_edit.setStyleSheet(field)
         self.filter_edit.setStyleSheet(field)
-        self.sort_box.setStyleSheet(field)
+        self.sort_box.setStyleSheet(
+            field
+            + " QAbstractItemView { background: #fffcf7; color: #1c1915; "
+            + "selection-background-color: #ebe4d8; selection-color: #1c1915; }"
+        )
         for button_widget in (self.search_button, self.select_button, self.more_button, self.cancel_button):
             button_widget.setStyleSheet(button)
         self.download_button.setStyleSheet(
-            "background: #1f3a2e; color: #f6f3ec; border: none; border-radius: 6px; padding: 8px 14px;"
+            "QPushButton { background: #1f3a2e; color: #f6f3ec; border: none; "
+            "border-radius: 6px; padding: 8px 14px; }"
+            "QPushButton:disabled { background: #8d978f; color: #f6f3ec; }"
         )
         self.table.setStyleSheet(
             """
             QTableWidget {
                 background: #fffcf7;
+                color: #1c1915;
+                alternate-background-color: #f3efe6;
                 border: 1px solid #d9d2c5;
                 border-radius: 6px;
                 padding: 0;
             }
             QHeaderView::section {
                 background: #ebe4d8;
+                color: #1c1915;
                 border: none;
                 padding: 8px;
                 font-weight: 600;
             }
-            QTableWidget::item { padding: 2px 6px; }
+            QTableWidget::item { color: #1c1915; padding: 2px 6px; }
             """
         )
 
@@ -466,24 +513,32 @@ class MainWindow(QMainWindow):
 
             title = QTableWidgetItem(video.title)
             title.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            title.setForeground(_INK)
             self.table.setItem(row, 1, title)
 
             duration = QTableWidgetItem(format_duration(video.duration_seconds))
             duration.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            duration.setForeground(_INK)
             duration.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table.setItem(row, 2, duration)
 
             uploaded = QTableWidgetItem(format_date(video.upload_date))
             uploaded.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            uploaded.setForeground(_INK)
             self.table.setItem(row, 3, uploaded)
 
             status = QTableWidgetItem(self._status.get(video.video_id, ""))
             status.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            status.setForeground(_INK)
             status.setToolTip(self._details.get(video.video_id, ""))
             self.table.setItem(row, 4, status)
 
             bar = QProgressBar()
             bar.setRange(0, 100)
+            bar.setStyleSheet(
+                "QProgressBar { color: #1c1915; background: #efeae1; border: none; }"
+                "QProgressBar::chunk { background: #1f3a2e; }"
+            )
             self.table.setCellWidget(row, 5, bar)
             self._paint_progress(bar, video.video_id)
         self._updating_table = False
