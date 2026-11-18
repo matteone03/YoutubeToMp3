@@ -35,8 +35,8 @@ Dates on the channel page are the ones YouTube shows there, such as "3 days ago"
 1. Paste a channel URL, such as `https://www.youtube.com/@channel`, and press Search.
 2. Sort by date or filter by title. Show more loads the next 30 videos.
 3. Tick the videos you want, or use Select all for the ones that match the filter.
-4. Press Download selected, choose a folder, and wait. One video downloads at a time.
-5. Cancel stops the file in progress and does not start the rest. If a file is already in the folder, you are asked before it is overwritten. No means the rest of that run stops.
+4. Press Download selected, choose a folder, and wait. Up to three videos download at a time.
+5. Cancel stops the downloads in progress and does not start the rest. If a file is already in the folder, you are asked before it is overwritten. No means nothing further starts; downloads already running finish.
 
 When the run finishes, the window shows how many downloads succeeded and how many failed.
 

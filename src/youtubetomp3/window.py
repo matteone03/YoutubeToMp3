@@ -1,4 +1,4 @@
-"""The desktop window: channel search, the video table, and one download at a time."""
+"""The desktop window: channel search, the video table, and the download queue."""
 
 from __future__ import annotations
 
@@ -40,38 +40,50 @@ from youtubetomp3.videos import (
     title_matches,
 )
 
-_INK = QBrush(QColor("#1c1915"))
+# Cursor's dark theme: near-black surfaces, light gray text, a light primary button.
+_TEXT = "#e6e6e6"
+_MUTED = "#9a9a9a"
+_WINDOW = "#181818"
+_CARD = "#262626"
+_ROW = "#202020"
+_BUTTON = "#2a2a2a"
+_BORDER = "#3c3c3c"
+_ACCENT = "#e8e8e8"
+_PROGRESS = "#4c8dff"
+_ERROR = "#f14c4c"
+_INK = QBrush(QColor(_TEXT))
+_PROGRESS_STYLE = (
+    f"QProgressBar {{ color: {_TEXT}; background: {_BUTTON}; border: none; border-radius: 3px; }}"
+    f"QProgressBar::chunk {{ background: {_PROGRESS}; border-radius: 3px; }}"
+)
 
 
-def _light_palette() -> QPalette:
-    """Light paper and dark ink for every color group.
-
-    Windows dark mode otherwise supplies white text, which disappears on these
-    light backgrounds. Linux already uses dark text, so this matches it.
-    """
-    ink = QColor("#1c1915")
-    muted = QColor("#5c564c")
-    paper = QColor("#f6f3ec")
-    card = QColor("#fffcf7")
-    button = QColor("#efeae1")
+def _dark_palette() -> QPalette:
+    """Black window and light text for every color group, including dialogs."""
+    text = QColor(_TEXT)
+    muted = QColor(_MUTED)
+    window = QColor(_WINDOW)
+    card = QColor(_CARD)
+    button = QColor(_BUTTON)
     palette = QPalette()
     for group in (
         QPalette.ColorGroup.Active,
         QPalette.ColorGroup.Inactive,
         QPalette.ColorGroup.Disabled,
     ):
-        palette.setColor(group, QPalette.ColorRole.Window, paper)
+        ink = muted if group == QPalette.ColorGroup.Disabled else text
+        palette.setColor(group, QPalette.ColorRole.Window, window)
         palette.setColor(group, QPalette.ColorRole.WindowText, ink)
         palette.setColor(group, QPalette.ColorRole.Base, card)
-        palette.setColor(group, QPalette.ColorRole.AlternateBase, QColor("#f3efe6"))
+        palette.setColor(group, QPalette.ColorRole.AlternateBase, QColor(_ROW))
         palette.setColor(group, QPalette.ColorRole.Text, ink)
         palette.setColor(group, QPalette.ColorRole.Button, button)
         palette.setColor(group, QPalette.ColorRole.ButtonText, ink)
         palette.setColor(group, QPalette.ColorRole.PlaceholderText, muted)
-        palette.setColor(group, QPalette.ColorRole.ToolTipBase, card)
-        palette.setColor(group, QPalette.ColorRole.ToolTipText, ink)
-        palette.setColor(group, QPalette.ColorRole.Highlight, QColor("#ebe4d8"))
-        palette.setColor(group, QPalette.ColorRole.HighlightedText, ink)
+        palette.setColor(group, QPalette.ColorRole.ToolTipBase, button)
+        palette.setColor(group, QPalette.ColorRole.ToolTipText, text)
+        palette.setColor(group, QPalette.ColorRole.Highlight, QColor("#264f78"))
+        palette.setColor(group, QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
     return palette
 
 
@@ -200,9 +212,9 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         title = QLabel("YoutubeToMp3")
-        title.setStyleSheet("font-size: 22px; font-weight: 600; color: #1c1915;")
+        title.setStyleSheet(f"font-size: 22px; font-weight: 600; color: {_TEXT};")
         subtitle = QLabel("Paste a channel URL, pick videos, and save them as 192 kbps MP3 files.")
-        subtitle.setStyleSheet("color: #5c564c;")
+        subtitle.setStyleSheet(f"color: {_MUTED};")
         subtitle.setWordWrap(True)
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -236,7 +248,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(tools)
 
         self.hint = QLabel("Paste a channel URL and press Search.")
-        self.hint.setStyleSheet("color: #5c564c;")
+        self.hint.setStyleSheet(f"color: {_MUTED};")
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
 
@@ -277,7 +289,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.message)
 
     def _apply_style(self) -> None:
-        palette = _light_palette()
+        palette = _dark_palette()
         self.setPalette(palette)
         self.centralWidget().setAutoFillBackground(True)
         self.centralWidget().setPalette(palette)
@@ -285,49 +297,53 @@ class MainWindow(QMainWindow):
         if qt_app is not None:
             qt_app.setPalette(palette)
         # Style the controls themselves. A stylesheet on the window makes the
-        # table draw its checkboxes as wide empty boxes. Each light surface
-        # also sets a dark text color, because Windows dark mode otherwise
-        # keeps white text on these backgrounds.
+        # table draw its checkboxes as wide empty boxes.
         field = (
-            "background: #fffcf7; color: #1c1915; border: 1px solid #d9d2c5; "
-            "border-radius: 6px; padding: 6px;"
+            f"background: {_CARD}; color: {_TEXT}; border: 1px solid {_BORDER}; "
+            "border-radius: 6px; padding: 6px; "
+            "selection-background-color: #264f78; selection-color: #ffffff;"
         )
         button = (
-            "background: #efeae1; color: #1c1915; border: 1px solid #d9d2c5; "
-            "border-radius: 6px; padding: 8px 14px;"
+            f"QPushButton {{ background: {_BUTTON}; color: {_TEXT}; border: 1px solid {_BORDER}; "
+            "border-radius: 6px; padding: 8px 14px; }"
+            "QPushButton:hover { background: #333333; }"
+            f"QPushButton:disabled {{ background: {_BUTTON}; color: #6e6e6e; border-color: #2e2e2e; }}"
         )
         self.url_edit.setStyleSheet(field)
         self.filter_edit.setStyleSheet(field)
         self.sort_box.setStyleSheet(
-            field
-            + " QAbstractItemView { background: #fffcf7; color: #1c1915; "
-            + "selection-background-color: #ebe4d8; selection-color: #1c1915; }"
+            f"QComboBox {{ {field} }}"
+            f"QComboBox QAbstractItemView {{ background: {_CARD}; color: {_TEXT}; "
+            "selection-background-color: #264f78; selection-color: #ffffff; "
+            f"border: 1px solid {_BORDER}; }}"
         )
         for button_widget in (self.search_button, self.select_button, self.more_button, self.cancel_button):
             button_widget.setStyleSheet(button)
         self.download_button.setStyleSheet(
-            "QPushButton { background: #1f3a2e; color: #f6f3ec; border: none; "
-            "border-radius: 6px; padding: 8px 14px; }"
-            "QPushButton:disabled { background: #8d978f; color: #f6f3ec; }"
+            f"QPushButton {{ background: {_ACCENT}; color: {_WINDOW}; border: none; "
+            "border-radius: 6px; padding: 8px 14px; font-weight: 600; }"
+            "QPushButton:hover { background: #f4f4f4; }"
+            "QPushButton:disabled { background: #3a3a3a; color: #8b8b8b; }"
         )
         self.table.setStyleSheet(
-            """
-            QTableWidget {
-                background: #fffcf7;
-                color: #1c1915;
-                alternate-background-color: #f3efe6;
-                border: 1px solid #d9d2c5;
+            f"""
+            QTableWidget {{
+                background: {_CARD};
+                color: {_TEXT};
+                alternate-background-color: {_ROW};
+                border: 1px solid {_BORDER};
                 border-radius: 6px;
                 padding: 0;
-            }
-            QHeaderView::section {
-                background: #ebe4d8;
-                color: #1c1915;
+            }}
+            QHeaderView::section {{
+                background: {_WINDOW};
+                color: {_MUTED};
                 border: none;
+                border-bottom: 1px solid {_BORDER};
                 padding: 8px;
                 font-weight: 600;
-            }
-            QTableWidget::item { color: #1c1915; padding: 2px 6px; }
+            }}
+            QTableWidget::item {{ color: {_TEXT}; padding: 2px 6px; }}
             """
         )
 
@@ -535,10 +551,7 @@ class MainWindow(QMainWindow):
 
             bar = QProgressBar()
             bar.setRange(0, 100)
-            bar.setStyleSheet(
-                "QProgressBar { color: #1c1915; background: #efeae1; border: none; }"
-                "QProgressBar::chunk { background: #1f3a2e; }"
-            )
+            bar.setStyleSheet(_PROGRESS_STYLE)
             self.table.setCellWidget(row, 5, bar)
             self._paint_progress(bar, video.video_id)
         self._updating_table = False
@@ -615,7 +628,7 @@ class MainWindow(QMainWindow):
 
     def _show_message(self, text: str, *, error: bool = False) -> None:
         self.message.setText(text)
-        color = "#8a2b2b" if error else "#1f3a2e"
+        color = _ERROR if error else _TEXT
         self.message.setStyleSheet(f"color: {color}; font-size: 14px;")
 
     def _forget_list_worker(self) -> None:

@@ -25,11 +25,11 @@ class DownloadResult:
 
 
 class CancelToken:
-    """Set from the UI thread. The download process is killed when this trips."""
+    """Set from the UI thread. Every attached download process is killed when this trips."""
 
     def __init__(self) -> None:
         self._event = threading.Event()
-        self._proc: subprocess.Popen[str] | None = None
+        self._procs: set[subprocess.Popen[str]] = set()
         self._lock = threading.Lock()
 
     def is_set(self) -> bool:
@@ -37,24 +37,33 @@ class CancelToken:
 
     def attach(self, proc: subprocess.Popen[str]) -> None:
         with self._lock:
-            self._proc = proc
+            self._procs.add(proc)
             already = self._event.is_set()
         if already:
             terminate_process(proc)
 
+    def detach(self, proc: subprocess.Popen[str]) -> None:
+        with self._lock:
+            self._procs.discard(proc)
+
     def cancel(self) -> None:
         self._event.set()
         with self._lock:
-            proc = self._proc
-        if proc is not None:
+            procs = list(self._procs)
+        for proc in procs:
             terminate_process(proc)
+
+
+def _yt_dlp_launch() -> list[str]:
+    """How to start yt-dlp. A frozen app is not a Python interpreter, so it cannot use -m."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--yt-dlp"]
+    return [sys.executable, "-m", "yt_dlp"]
 
 
 def build_command(video_url: str, output_template: str, ffmpeg: str) -> list[str]:
     return [
-        sys.executable,
-        "-m",
-        "yt_dlp",
+        *_yt_dlp_launch(),
         "--newline",
         "--no-playlist",
         "--no-warnings",
@@ -122,33 +131,38 @@ def download_to_file(
             popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
             popen_kwargs["start_new_session"] = True
+        proc: subprocess.Popen[str] | None = None
         try:
-            proc = subprocess.Popen(command, **popen_kwargs)
-        except OSError as exc:
-            logger.warning("Could not start yt-dlp: %s", exc)
-            return DownloadResult("fail", "Could not start the download.")
-        cancel.attach(proc)
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            lines.append(line)
+            try:
+                proc = subprocess.Popen(command, **popen_kwargs)
+            except OSError as exc:
+                logger.warning("Could not start yt-dlp: %s", exc)
+                return DownloadResult("fail", "Could not start the download.")
+            cancel.attach(proc)
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                lines.append(line)
+                if cancel.is_set():
+                    terminate_process(proc)
+                    break
+                percent = parse_progress(line)
+                if percent is not None:
+                    on_progress(percent)
+            return_code = proc.wait()
             if cancel.is_set():
-                terminate_process(proc)
-                break
-            percent = parse_progress(line)
-            if percent is not None:
-                on_progress(percent)
-        return_code = proc.wait()
-        if cancel.is_set():
+                _remove(partial)
+                return DownloadResult("cancel")
+            mp3_files = sorted(Path(temp_dir).glob("*.mp3"))
+            if return_code == 0 and len(mp3_files) == 1:
+                shutil.move(str(mp3_files[0]), partial)
+                os.replace(partial, destination)
+                on_progress(100)
+                return DownloadResult("ok")
             _remove(partial)
-            return DownloadResult("cancel")
-        mp3_files = sorted(Path(temp_dir).glob("*.mp3"))
-        if return_code == 0 and len(mp3_files) == 1:
-            shutil.move(str(mp3_files[0]), partial)
-            os.replace(partial, destination)
-            on_progress(100)
-            return DownloadResult("ok")
-        _remove(partial)
-        return DownloadResult("fail", _failure_detail(lines))
+            return DownloadResult("fail", _failure_detail(lines))
+        finally:
+            if proc is not None:
+                cancel.detach(proc)
 
 
 def terminate_process(proc: subprocess.Popen[str]) -> None:

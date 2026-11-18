@@ -23,6 +23,7 @@ def test_command_requests_a_192k_mp3_without_embedded_metadata():
     assert "192K" in command
     assert "--embed-metadata" not in command
     assert "--embed-thumbnail" not in command
+    assert command[1:3] == ["-m", "yt_dlp"]
     assert command[-1] == "https://www.youtube.com/watch?v=abc"
 
 
@@ -61,6 +62,26 @@ def test_successful_download_moves_the_mp3_into_place(tmp_path: Path, monkeypatc
     assert destination.read_bytes() == b"mp3"
     assert seen[-1] == 100
     assert not list(tmp_path.glob("*.partial"))
+
+
+def test_cancel_terminates_every_attached_process(monkeypatch):
+    killed = []
+
+    class Proc:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    monkeypatch.setattr("youtubetomp3.downloader.terminate_process", lambda proc: killed.append(proc.name))
+    token = CancelToken()
+    first = Proc("first")
+    second = Proc("second")
+    token.attach(first)
+    token.attach(second)
+    token.detach(first)
+    token.cancel()
+    late = Proc("late")
+    token.attach(late)
+    assert set(killed) == {"second", "late"}
 
 
 def test_yt_dlp_module_starts():

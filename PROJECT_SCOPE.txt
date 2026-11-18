@@ -1,6 +1,6 @@
 YoutubeToMp3 — project scope
 Ground truth for other agents
-Last updated: 5 November 2026
+Last updated: 8 November 2026
 
 This file is the source of truth for what YoutubeToMp3 is and is not.
 Follow it. Do not add features, screens, or behaviors that this file does not
@@ -82,15 +82,14 @@ with "show more".
 - There is a select-all control.
 - Select-all affects the videos currently loaded that match the current title
   filter. Videos not loaded yet are not selected.
-- The user may select several videos. v1 still downloads them one at a time
-  (see section 7). Selecting several videos is in scope now so a later version
-  can download in bulk without changing how selection works.
+- The user may select several videos. Up to three of them download at the
+  same time (see section 7).
 
 
 7. Download behavior (v1)
 -------------------------
-Process the selected videos one at a time, in the order they appear in the
-current list. Do not download more than one video at the same time.
+Start the selected videos in the order they appear in the current list.
+Run up to three downloads at the same time. Do not run more than three.
 
 Audio:
 - Container and codec target: MP3.
@@ -107,6 +106,9 @@ File name:
   list stays the original title. This sanitizing is only so the file can
   exist on disk. It is not a different naming scheme.
 - Trim spaces and dots from the ends of the file name after sanitizing.
+- If two videos in the same action would use the same file name, finish the
+  earlier one before asking about or starting the later one. Do not write
+  both of those files at the same time.
 
 Folder:
 - Every download action starts by asking the user to pick a folder.
@@ -120,10 +122,11 @@ File already in that folder:
   queue.
 - If the user declines, cancel the action: do not overwrite that file, and
   do not start any further videos in the queue.
+- Downloads that have already started keep running.
 - Files already finished earlier in the same action stay in the folder.
 
 Progress, for each video that has been attempted:
-- Show a percentage (0 to 100) for the file that is currently downloading.
+- Show a percentage (0 to 100) for each file that is currently downloading.
 - Show one of these states: working, done, failed.
 - A selected video that has not started yet has no state yet.
 
@@ -139,7 +142,7 @@ When the run finishes, show:
 
 Cancel:
 - The user can cancel a download that is already running.
-- Cancel stops the file in progress and does not start the rest of the queue.
+- Cancel stops every file in progress and does not start the rest of the queue.
 - Do not leave a partial file behind as if it were a finished MP3. Remove
   the incomplete file.
 - Files already finished stay in the folder.
@@ -161,7 +164,6 @@ While a download action is running:
 - Playlists as the entry point
 - Lookup by display name or @handle
 - Shorts, livestreams, premieres, members-only videos
-- More than one download at a time
 - Any bitrate other than 192 kbps
 - Any file name other than the video title
 - A default folder that skips the folder picker
@@ -170,15 +172,11 @@ While a download action is running:
 - Refreshing the list without pressing Search
 
 
-9. Later version (do not build this now)
------------------------------------------
-Bulk download: process the same selected queue with more than one download
-at a time.
-
-v1 already lets the user select many videos, already runs that selection as
-a queue, and already reports a success count and a failure count. The later
-change is concurrency, not a new way to select videos. v1 starts one download
-child process. That later version may start more than one. See section 12.
+9. Concurrency
+--------------
+Up to three downloads run at once. That limit, and the rules for overwrite,
+cancel, failures, and titles that share a file name, are in section 7.
+Do not go back to one download at a time, and do not raise the limit.
 
 
 10. Good enough to use
@@ -192,7 +190,7 @@ v1 is good enough when the user can:
 - tick a few videos (or select all of the loaded, filtered list)
 - pick a folder
 - get 192 kbps MP3s named from the video titles
-- see working / done / failed, a percentage on the file in progress, and a
+- see working / done / failed, a percentage on each file in progress, and a
   final count of successes and failures
 
 
@@ -207,8 +205,9 @@ later agents do not invent a different behavior.
 - Page size is 30, appended, not replaced.
 - Select-all applies to loaded videos that match the filter, not to videos
   still unloaded.
-- Several checked videos download sequentially, one at a time.
-- Declining an overwrite cancels the rest of the action.
+- Several checked videos download up to three at a time, started in list order.
+- Titles that share a file name wait, so only one of them is written at a time.
+- Declining an overwrite starts nothing further. Downloads already started finish.
 - Cancel removes the incomplete file and does not count unstarted videos as
   failures.
 - Title-to-filename sanitizing exists only to strip illegal file-name
@@ -247,9 +246,6 @@ Window:
 
 Download process:
 - Each download runs in its own child process.
-- v1 starts only one child process at a time.
-- Cancel terminates that process. The app then removes the incomplete file,
-  as section 7 requires.
-- A later bulk version may start more than one child process. Do not build
-  that now. Keep this process boundary so that change does not need a new
-  way to select videos.
+- Up to three child processes run at a time.
+- Cancel terminates those processes. The app then removes each incomplete
+  file, as section 7 requires.
