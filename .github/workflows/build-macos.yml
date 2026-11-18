@@ -1,0 +1,32 @@
+name: Build macOS DMG
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: # Ti permette di avviare la build manualmente con un clic su GitHub
+
+jobs:
+  build-macos:
+    # Usa una macchina virtuale macOS con chip Apple Silicon (arm64)
+    runs-on: macos-latest
+
+    steps:
+      - name: Scarica il codice del repository
+        uses: actions/checkout@v4
+
+      - name: Configura Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Esegui build_macos.sh
+        run: |
+          chmod +x build_macos.sh
+          ./build_macos.sh
+
+      - name: Carica YoutubeToMp3.dmg come Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YoutubeToMp3-macOS-AppleSilicon
+          path: dist/YoutubeToMp3.dmg
+          if-no-files-found: error
